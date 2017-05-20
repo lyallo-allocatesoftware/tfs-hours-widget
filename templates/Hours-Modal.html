@@ -1,0 +1,70 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+	<script src="../bower_components/vss-web-extension-sdk/lib/VSS.SDK.min.js"></script>
+</head>
+<body>
+	<div id="hours-grid" style="height:100vh;"></div>
+<script>
+VSS.init({
+    explicitNotifyLoaded: true,
+    usePlatformStyles: true
+});
+
+VSS.require(["VSS/Controls", "VSS/Controls/Grids", "TFS/WorkItemTracking/Services", "TFS/WorkItemTracking/RestClient"], function(Controls, Grids, WorkItemServices, WitApiClient) {
+    VSS.register("Hours-Modal", function() {
+        return {
+            loadHours: function(workItemsHours) {
+                
+                var workItemIds = workItemsHours.map(function(w) { return w.id });
+                WitApiClient.getClient().getWorkItems(workItemIds, ["System.Id", "System.Title", "System.ChangedDate"]).then(function(workItems) {
+
+                    // arrange grid data
+                    var gridWorkItems = [];
+                    for (var i = 0; i < workItems.length; i ++) {
+                        var workItem = workItems[i].fields;
+
+                        // add completed hours to each work item
+                        var completedWorkToday = workItemsHours.filter(function(workItemHours) {
+                            return workItemHours.id === workItem["System.Id"];
+                        })[0].completedWorkToday;
+
+                        // only include work items with hours logged today
+                        if (completedWorkToday > 0) {
+                            workItem.completedWorkToday = completedWorkToday;
+                            workItem["System.ChangedDate"] = new Date(workItem["System.ChangedDate"]);
+                            gridWorkItems.push(workItem);
+                        }
+                    }
+
+                    var gridOptions = {
+                        height: "100%",
+                        width: "100%",
+                        allowMoveColumns: false,
+                        source: gridWorkItems,
+                        columns: [
+                            { text: "ID", index: "System.Id", width: 100, canSortBy: false },
+                            { text: "Title", index: "System.Title", width: 250, canSortBy: false },
+                            { text: "Hours", index: "completedWorkToday", width: 60, canSortBy: false },
+                            { text: "Last Changed", index: "System.ChangedDate", width: 100, format: "h:mm tt", canSortBy: false }
+                        ],
+                        openRowDetail: function(rowIndex) {
+                            // open a work item form modal
+                            WorkItemServices.WorkItemFormNavigationService.getService().then(function(service) {
+                                service.openWorkItem(grid.getRowData(rowIndex)["System.Id"], false);
+                            });
+                        }
+                    };
+
+                    var grid = Controls.create(Grids.Grid, document.getElementById("hours-grid"), gridOptions);
+                });
+            }
+        }
+    });
+
+    VSS.notifyLoadSucceeded();
+});
+</script>
+</body>     
+</html>
